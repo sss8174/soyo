@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>X OAuth 認証コールバック</title>
+  <style>
+    #debug-info {
+      background-color: #f8f9fa;
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin: 10px 0;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <!-- セクション1: 直接アクセス時の説明（デフォルト） -->
+  <div id="instructions" style="display: none;">
+    <p>このページは認証用です。</p>
+    <ol>
+      <li>直接このURLにアクセスした場合は、「現在のURL」をコピーし、Callback URLの設定に貼り付けて保存してください。
+        スプレッドシートの「X(Twitter) Callback URL」とX Developer Portalの「Callback URL」の２箇所で同じURLを入力してください。</li>
+      <li>「X(Twitter) APIの認証!」の認証リンクからアクセスしてください</li>
+    </ol>
+  </div>
+  
+  <!-- セクション2: 認証中のメッセージ -->
+  <div id="authProcess" style="display: none;">
+    <h1>X(Twitter)認証処理中</h1>
+    <p>認証処理を実行中です。5秒後に自動的にリダイレクトされます。</p>
+    <p>自動的にリダイレクトされない場合は、下記のリンクをクリックしてください。</p>
+    <p><a id="redirect-link" href="#">リダイレクトする</a></p>
+    <div id="error-message" style="display: none; color: red;">
+      <p>エラー: 認証パラメータが見つかりません。X(Twitter)認証プロセスを最初からやり直してください。</p>
+    </div>
+  </div>
+
+  <div id="debug-info" style="display: none;"></div>
+  <script>
+    // GAS側のコールバックURLはスクリプトで自動置換します
+    const CALLBACK_BASE_URL = 'https://script.google.com/macros/d/126OH6mpIIpT1QGkUPPQtfotmrMJsBn3v1miZ0NyUq9DxY0elkRtBzYpE/usercallback';
+
+    // X（Twitter）の認証プロセスでは、認証後にこのページに以下のようなクエリパラメータが付与されて戻ってきます
+    // 例: ?code=XXXX&state=YYYY （OAuth 2.0の場合）
+    // これらのパラメータは認証プロセスを完了するために必要です
+    const queryParams = window.location.search;
+
+    function showDebugInfo() {
+      const debugDiv = document.getElementById('debug-info');
+      if (debugDiv) {
+        debugDiv.innerHTML = '<p><strong>現在のURL:</strong> ' + window.location.href + '</p>' +
+                           '<p><strong>クエリパラメータ:</strong> ' + queryParams + '</p>';
+        debugDiv.style.display = 'block';
+      }
+    }
+
+    // 認証プロセスの場合（クエリパラメータがある場合）はリダイレクト処理を実行
+    if (queryParams && queryParams.length > 1) {
+      redirectToCallback(queryParams);
+    }
+    // ※クエリパラメータがない場合は、直接アクセス用の「instructions」セクションが表示されます。
+
+    document.addEventListener('DOMContentLoaded', function() {
+      showDebugInfo();
+
+      const instructions = document.getElementById('instructions');
+      const authProcess = document.getElementById('authProcess');
+      // クエリパラメータがある場合は認証中メッセージを表示、それ以外は説明を表示
+      if (queryParams && queryParams.length > 1) {
+        instructions.style.display = 'none';
+        authProcess.style.display = 'block';
+      } else {
+        instructions.style.display = 'block';
+        authProcess.style.display = 'none';
+      }
+    });
+    // 予備: フォールバック用にリダイレクトリンクも設定（自動リダイレクトが機能しない場合）
+    if (queryParams && queryParams.length > 1) {
+      document.getElementById('redirect-link').href = CALLBACK_BASE_URL + queryParams;
+    }
+
+    function redirectToCallback(params) {
+      // 5秒後にリダイレクトする処理
+      setTimeout(function() {
+        window.location.href = CALLBACK_BASE_URL + params;
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
