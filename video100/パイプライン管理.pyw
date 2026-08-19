@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import traceback
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
@@ -408,6 +409,30 @@ def add_clips(folder, part, paths, progress=None, cancel=None):
     return n
 
 
+# ── エラーの見える化 ────────────────────────────────
+# pythonw.exe で起動しているためコンソールが無く、例外が起きても何も出ずに
+# 終了してしまう。原因が分かるようにログとダイアログの両方に出す。
+ERROR_LOG = BASE / "起動エラー.txt"
+
+
+def report_error(text, title="パイプライン管理のエラー"):
+    """例外の内容をログに書き、ダイアログで知らせる(失敗しても落ちない)。"""
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    where = ""
+    try:
+        with open(ERROR_LOG, "a", encoding="utf-8") as fp:
+            fp.write(f"===== {stamp} =====\n{text}\n")
+        where = f"\n\n詳しい内容: {ERROR_LOG}"
+    except Exception:
+        pass
+    try:    # Windowsの素のダイアログ(tkinterが壊れていても出せる)
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(
+            None, text[-1500:] + where, title, 0x10)
+    except Exception:
+        pass
+
+
 # ── モーダル表示中の目印(自動更新を止める判定に使う) ──────
 # ダイアログ表示中は tkinter が入れ子のイベントループに入るため、その裏で
 # 一覧の作り直しが走ると操作が固まったように見える。表示中はこの数が増える。
@@ -585,6 +610,15 @@ class App(_TkBase):
     #   ・重いコピーは別スレッド(メインループを止めない)
     #   ・同じダイアログは1つだけ / 処理中は新しい操作を受け付けない
     #   ・まとめて開く操作(再生・フォルダ)は件数を確認してから
+
+    def report_callback_exception(self, exc, val, tb):
+        """ボタン操作などで起きた例外を握り潰さずに知らせる(pythonw対策)。"""
+        text = "".join(traceback.format_exception(exc, val, tb))
+        report_error(text, "操作中にエラーが起きました")
+        try:
+            self.status.set("エラーが起きました(起動エラー.txt を参照)")
+        except Exception:
+            pass
 
     def _guard(self):
         """コピー中・ダイアログ表示中なら False(その操作は受け付けない)。"""
@@ -765,7 +799,7 @@ class App(_TkBase):
         data = event.data
         y = event.y_root - self.tree.winfo_rooty()
         self.after_idle(lambda: self._drop_tree_later(data, y))
-        return getattr(event, "action", None)
+        return getattr(event, "action", "copy")
 
     def _drop_tree_later(self, data, y):
         if not self._guard():
@@ -787,7 +821,7 @@ class App(_TkBase):
     def _on_drop_zone(self, part, event):
         data = event.data
         self.after_idle(lambda: self._drop_zone_later(part, data))
-        return getattr(event, "action", None)
+        return getattr(event, "action", "copy")
 
     def _drop_zone_later(self, part, data):
         if not self._guard():
@@ -1325,4 +1359,9 @@ class App(_TkBase):
 
 
 if __name__ == "__main__":
-    App().mainloop()
+    try:
+        App().mainloop()
+    except Exception:
+        # ここに来るのは起動そのものに失敗した場合(Tcl/Tkが壊れている等)
+        report_error(traceback.format_exc(), "パイプライン管理を起動できません")
+        raise
